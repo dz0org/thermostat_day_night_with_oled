@@ -15,6 +15,15 @@ Written by Limor Fried/Ladyada  for Adafruit Industries.
 BSD license, check license.txt for more information
 All text above, and the splash screen must be included in any redistribution
 *********************************************************************/
+// sensor temperature
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+#define PIN_THERMOMETER 10
+
+OneWire oneWire(PIN_THERMOMETER);
+DallasTemperature sensors(&oneWire);
+
 // Date and time functions using a DS3231 RTC connected via I2C and Wire lib
 #include <Wire.h>
 #include "RTClib.h"
@@ -23,7 +32,6 @@ RTC_DS3231 rtc;
 
 // Oled
 #include <SPI.h>
-#include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
@@ -60,8 +68,15 @@ static const unsigned char PROGMEM logo16_glcd_bmp[] =
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
 
+float tempC = 0;
+int tempDay = 32;
+int tempNight = 18;
+
 void setup()   {                
+  
   Serial.begin(9600);
+  // sonde thermique on
+  sensors.begin();
 
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3D (for the 128x64)
@@ -100,13 +115,16 @@ void loop() {
 
 void getDate(void) {
   
+  sensors.requestTemperatures();
+  tempC = sensors.getTempCByIndex(0);
+  
   DateTime now = rtc.now();
   
   display.setTextSize(3);
   display.setTextColor(WHITE);
   display.setCursor(10,0);
 
-  display.println(now.second(), DEC);
+  display.println(tempC);
   display.display();
   
   delay(1000);
