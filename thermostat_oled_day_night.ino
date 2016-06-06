@@ -65,19 +65,18 @@ DallasTemperature sensors(&oneWire);
 float tempC = 0, temp_max = 0, temp_max_day = 32, temp_max_night = 18;
 
 // time
+
 DateTime dt_start_day (2016, 12, 12, 8, 30, 0);  // 8h30
 DateTime dt_end_day (0, 0, 0, 21, 30, 0);  // 21h30
-DateTime dt_time[2] = { dt_start_day, dt_end_day };
+DateTime now;
 
 // buttons
 Button bt_a(PIN_BT_A, true, false, 20);
 Button bt_b(PIN_BT_B, true, false, 20);
-enum {ONOFF, CHANGE_TIME, T1, T2, HH_1, HH_2, MM_1, MM_2, STOP};       
+enum {WAIT, CHANGE_TIME, T1, T2, STOP};       
 uint8_t STATE;
 
 int day_mode = 'null';    // day_mode = 0 
-int start_time_i = 'null', end_time_i = 'null';
-
 
 
 void setup()   { 
@@ -89,7 +88,7 @@ void setup()   {
   
   //Adafruit splashscreen
   display.display();
-  delay(500);
+  delay(1000);
   display.clearDisplay();
   
   if (! rtc.begin()) {
@@ -108,8 +107,8 @@ void setup()   {
 
 void loop() {
   
-  DateTime now = rtc.now();
-
+  now = rtc.now();
+  Serial.println( "start" );
   // detect and switch if night mode or day mode
   if ( now.hour() >= dt_end_day.hour() && now.minute() >= dt_end_day.minute() )
     day_mode = 1;
@@ -134,7 +133,7 @@ void button_action() {
 
   switch (STATE) {
       
-      case ONOFF:
+      case WAIT:
           Serial.println("ONOFF");    
           if ( bt_a.isPressed() )
             set_tempC_with_pot();
@@ -167,7 +166,7 @@ void button_action() {
 void bt_add_time(DateTime *dt) {
 
   if ( bt_a.isPressed() && bt_b.isPressed() )
-    STATE = ONOFF;
+    STATE = WAIT;
     
   if ( bt_a.pressedFor(LONG_PRESS) ) {
     Serial.println( "+1h" );
@@ -177,26 +176,21 @@ void bt_add_time(DateTime *dt) {
   if ( bt_b.pressedFor(LONG_PRESS) ) {
     Serial.println( "+5m" );
     *dt = *dt + TimeSpan(0, 0, 5, 0);
-  }> 
+  } 
 }
 
 // - TIME_FUCT -
-DateTime add_time(DateTime *dt, TimeSpan time) {
-  
-  *dt = *dt + time;
-  return *dt;
-  
-} 
+//DateTime add_time(DateTime *dt, TimeSpan time) {
+//  *dt = *dt + time;
+//  return *dt;
+//} 
 
 void get_time(const DateTime dt) {
   
-  Serial.print(dt.hour(), DEC);
-  Serial.print(':');
-  Serial.print(dt.minute(), DEC);
-  Serial.print(':');
-  Serial.print(dt.second(), DEC);
-  Serial.println();
-    
+  display.print(dt.hour(), DEC);
+  display.print('h');
+  display.print(dt.minute(), DEC);
+
 } //end time fct
 
 
@@ -217,7 +211,7 @@ void set_tempC_with_pot(void) {
     Serial.println("Error durring potentiometer value");
     
   // Serial.println("pot_val : ");
-  //  Serial.print(pot_val); 
+  // Serial.print(pot_val); 
 }  // end fct
 
 
@@ -261,11 +255,16 @@ void set_oled(int mode) {
   display.setTextSize(2);
   display.setTextColor(WHITE);
   
-  // D [ON]
+  // D
   display.print(symb[mode]);
-  display.print(" ");
+  
+  // time
+  display.setCursor(25,0);
+  get_time( now );
+  
+  // ON
   display.setCursor(90,0);
-  display.print("OFF");
+  display.print("ON");
  
   // curren temp
   display.setCursor(0,25);
@@ -284,25 +283,19 @@ void set_oled(int mode) {
     t_start = dt_start_day;
     t_end = dt_end_day;
   }
-    
-  
-  //Serial.println("Av affichage :");
-  //Serial.println( dt_start_day.hour() );
   
   // time slot
   display.setCursor(0,50);
-  display.print( t_start.hour() );
-  display.print("h");
-  display.print( t_start.minute() );
+  get_time( t_start );
   
   display.setCursor(65,50);
-  display.print( t_end.hour() );
-  display.print("h");
-  display.print( t_end.minute() );
+  get_time( t_end );
     
   display.display();
-  
-  delay(500);
   display.clearDisplay();
 
 }  // end oled fct
+
+void blink_oled() {
+
+}
