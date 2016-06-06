@@ -1,4 +1,5 @@
 // Date and time functions using a DS3231 RTC connected via I2C and Wire lib
+// check other TimeRTC.pde
 #include <Wire.h>
 #include "RTClib.h"
 #include <Button.h>
@@ -53,27 +54,24 @@ static const unsigned char PROGMEM logo16_glcd_bmp[] =
 #define PIN_BT_A 5
 #define PIN_BT_B 3
 
-
-
-#define LONG_PRESS 1000
 OneWire oneWire(PIN_THERM);
 DallasTemperature sensors(&oneWire);
 
 // VARIABLES //
-
 // temp
 float tempC = 0, temp_max = 0, temp_max_day = 32, temp_max_night = 18;
 
 // time
 
-DateTime dt_start_day (2016, 12, 12, 8, 30, 0);  // 8h30
-DateTime dt_end_day (0, 0, 0, 21, 30, 0);  // 21h30
 DateTime now;
-
+DateTime dt_start_day (now.year(), now.month(), now.day(), 8, 30, now.second());  // 8h30
+DateTime dt_end_day (now.year(), now.month(), now.day(), 21, 30, now.second());  // 21h30
+  
 // buttons
+#define LONG_PRESS 1000
+enum {WAIT, CHANGE_TIME, T1, T2, STOP};  
 Button bt_a(PIN_BT_A, true, false, 20);
 Button bt_b(PIN_BT_B, true, false, 20);
-enum {WAIT, CHANGE_TIME, T1, T2, STOP};       
 uint8_t STATE;
 
 int day_mode = 'null';    // day_mode = 0 
@@ -107,38 +105,40 @@ void setup()   {
 
 void loop() {
   
-  now = rtc.now();
-  Serial.println( "start" );
+  DateTime now = rtc.now();
+
+
   // detect and switch if night mode or day mode
   if ( now.hour() >= dt_end_day.hour() && now.minute() >= dt_end_day.minute() )
-    day_mode = 1;
+    day_mode = 0;
   else
     day_mode = 0;
-  
+    
+  get_time(now);
   button_action();
   set_oled(day_mode);
-   
+
+
   // int relay_on_off = check_tempC();
   // digitalWrite(PIN_RELAY,relay_on_off);
 
 }   // end loop
 
 
-
-
 // - BUTTONS_FUCT -
 void button_action() {
-
+  
   bt_a.read(); bt_b.read();
 
   switch (STATE) {
       
       case WAIT:
-          Serial.println("ONOFF");    
-          if ( bt_a.isPressed() )
+          Serial.println("WAIT");    
+          if ( bt_a.pressedFor(1000) && bt_b.isReleased() )
             set_tempC_with_pot();
-          if ( bt_b.wasReleased() )
-            Serial.print("select mode D/N");
+            
+          if ( bt_b.isPressed() && bt_a.isReleased() )
+            Serial.println("select mode D/N");
           else if ( bt_a.isPressed() && bt_b.isPressed() )
             STATE = CHANGE_TIME;
           break;
@@ -152,31 +152,41 @@ void button_action() {
           break;
           
       case T1:
-          // Serial.println( "T1" );
+          Serial.println( "T1" );
           bt_add_time( &dt_start_day );
           break;
             
       case T2:
-          // Serial.println( "T1" );
-          bt_add_time( &dt_end_day);
+          Serial.println( "T2" );
+          bt_add_time( &dt_end_day );
           break;
     }
 } // end fct
 
 void bt_add_time(DateTime *dt) {
-
+  
+  // if inative during 15sec go to wait status 
+  if ( bt_a.releasedFor(15000) && bt_b.releasedFor(15000) ) {
+      STATE = WAIT;
+      // Serial.println( "inatif go wait");
+    }
+    
+  // pressed the two buttons go to wait status
   if ( bt_a.isPressed() && bt_b.isPressed() )
     STATE = WAIT;
-    
-  if ( bt_a.pressedFor(LONG_PRESS) ) {
-    Serial.println( "+1h" );
-    *dt = *dt + TimeSpan(0, 1, 0, 0);
+  else {
+        
+      if ( bt_a.pressedFor(LONG_PRESS) || bt_a.isPressed() ) {
+        Serial.println( "+1h" );
+        *dt = *dt + TimeSpan(0, 1, 0, 0);
+      }
+        
+      if ( bt_b.pressedFor(LONG_PRESS) || bt_b.isPressed() ) {
+        Serial.println( "+5m" );
+        *dt = *dt + TimeSpan(0, 0, 5, 0);
+      }
   }
-    
-  if ( bt_b.pressedFor(LONG_PRESS) ) {
-    Serial.println( "+5m" );
-    *dt = *dt + TimeSpan(0, 0, 5, 0);
-  } 
+  
 }
 
 // - TIME_FUCT -
@@ -187,25 +197,27 @@ void bt_add_time(DateTime *dt) {
 
 void get_time(const DateTime dt) {
   
-  display.print(dt.hour(), DEC);
-  display.print('h');
-  display.print(dt.minute(), DEC);
+  Serial.println();
+  Serial.print(dt.hour(), DEC);
+  Serial.print('h');
+  Serial.print(dt.minute(), DEC);
 
-} //end time fct
-
+} //end fct
 
 // - TEMP_FUCT -
 void set_tempC_with_pot(void) {
   
   float pot_val = 16.0 + (analogRead(PIN_POT) / 51.2) ;
   
+  Serial.println("Potentiometer");
+  
   if (day_mode == 0) {
     temp_max_day = pot_val;
-    Serial.print("set D max temp");
+    //Serial.print("set D max temp");
   }
   else if ( day_mode == 1) {
     temp_max_night = pot_val;
-    Serial.print("set N max temp");
+    //Serial.print("set N max temp");
   }
   else
     Serial.println("Error durring potentiometer value");
@@ -249,7 +261,8 @@ void set_oled(int mode) {
 
   char symb[2] = {'D', 'N'};
   float temp_max[2] = { temp_max_day, temp_max_night };
-  DateTime t_start = 'null', t_end = 'null';
+  DateTime now = rtc.now(), t_start = 'null', t_end = 'null';
+
   
   display.setCursor(0,0);
   display.setTextSize(2);
@@ -259,8 +272,8 @@ void set_oled(int mode) {
   display.print(symb[mode]);
   
   // time
-  display.setCursor(25,0);
-  get_time( now );
+  display.setCursor(20,0);
+  display_time( now );
   
   // ON
   display.setCursor(90,0);
@@ -286,16 +299,21 @@ void set_oled(int mode) {
   
   // time slot
   display.setCursor(0,50);
-  get_time( t_start );
+  display_time( t_start );
   
   display.setCursor(65,50);
-  get_time( t_end );
+  display_time( t_end );
     
   display.display();
   display.clearDisplay();
 
-}  // end oled fct
+}  // end fct
 
-void blink_oled() {
+void display_time(const DateTime dt) {
+  
+  display.print(dt.hour(), DEC);
+  display.print('h');
+  display.print(dt.minute(), DEC);
 
-}
+} //end old fct
+
