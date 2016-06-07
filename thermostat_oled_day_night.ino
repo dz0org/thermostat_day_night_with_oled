@@ -65,19 +65,19 @@ float tempC = 0, temp_max = 0, temp_max_day = 32, temp_max_night = 18;
 
 DateTime now;
 DateTime dt_start_day (now.year(), now.month(), now.day(), 8, 30, now.second());  // 8h30
-DateTime dt_end_day (now.year(), now.month(), now.day(), 21, 30, now.second());  // 21h30
+DateTime dt_end_day (now.year(), now.month(), now.day(), 23, 34, now.second());  // 21h30
   
 // buttons
 #define LONG_PRESS 1000
-enum {WAIT, CHANGE_TIME, T1, T2, STOP};  
+enum {WAIT, CHANGE_TIME, T_START, T_END, STOP};  
 Button bt_a(PIN_BT_A, true, false, 20);
 Button bt_b(PIN_BT_B, true, false, 20);
 uint8_t STATE;
 
-int day_mode = 'null';    // day_mode = 0 
+boolean day_mode = 'null';    // day_mode = 0 
 
 
-void setup()   { 
+void setup() { 
   
   Serial.begin(9600);
 
@@ -107,17 +107,37 @@ void loop() {
   
   DateTime now = rtc.now();
 
-
-  // detect and switch if night mode or day mode
-  if ( now.hour() >= dt_end_day.hour() && now.minute() >= dt_end_day.minute() )
-    day_mode = 0;
-  else
-    day_mode = 0;
+  
+  // detect if night or day
+  if ( now.hour() > dt_end_day.hour() && now.hour() < dt_start_day.hour() )     // 22 > 21 && 7 < 8 -> night
+    day_mode = false;
     
-  get_time(now);
-  button_action();
-  set_oled(day_mode);
+  else {
+    
+    if ( now.hour() < dt_end_day.hour() && now.hour() > dt_start_day.hour() )   // 20 < 21 && 7 > 8 -> day
+     day_mode = true;
+     
+    else {
+     
+      if ( now.hour() == dt_end_day.hour() ) {         // 21h = 21h
+        if ( now.minute() >= dt_end_day.minute()  )    // 45m >= 30m
+          day_mode = false;
+        else
+          day_mode = true;
+      }
+      
+      else if ( now.hour() == dt_start_day.hour() ) {  // 8h = 8h
+        if ( now.minute() >= dt_end_day.minute()  )    // 45m >= 30m
+          day_mode = true;
+        else
+          day_mode = false;
+      }  
+    }
+  } 
 
+  
+  button_action(day_mode);
+  set_oled(day_mode);
 
   // int relay_on_off = check_tempC();
   // digitalWrite(PIN_RELAY,relay_on_off);
@@ -126,7 +146,7 @@ void loop() {
 
 
 // - BUTTONS_FUCT -
-void button_action() {
+void button_action(boolean day_mode) {
   
   bt_a.read(); bt_b.read();
 
@@ -146,19 +166,25 @@ void button_action() {
       case CHANGE_TIME:
           Serial.println("change_time");
           if ( bt_a.wasReleased() )
-            STATE = T2;
+            STATE = T_END;
           else if ( bt_b.wasReleased() )
-            STATE = T1;
+            STATE = T_START;
           break;
           
-      case T1:
-          Serial.println( "T1" );
-          bt_add_time( &dt_start_day );
+      case T_START:
+          Serial.println( "T_START" );
+          if ( day_mode )
+            bt_add_time( &dt_start_day );
+          else 
+            bt_add_time( &dt_end_day );
           break;
             
-      case T2:
-          Serial.println( "T2" );
-          bt_add_time( &dt_end_day );
+      case T_END:
+          Serial.println( "T_END" );
+          if ( day_mode )
+            bt_add_time( &dt_end_day );
+          else 
+            bt_add_time( &dt_start_day );
           break;
     }
 } // end fct
@@ -195,12 +221,22 @@ void bt_add_time(DateTime *dt) {
 //  return *dt;
 //} 
 
-void get_time(const DateTime dt) {
+void get_time(const DateTime dt, boolean full) {
   
   Serial.println();
   Serial.print(dt.hour(), DEC);
   Serial.print('h');
   Serial.print(dt.minute(), DEC);
+  
+  if ( full ) {
+    Serial.print(' ');
+    Serial.print(dt.day(), DEC);
+    Serial.print('/');
+    Serial.print(dt.month(), DEC);
+    Serial.print('/');
+    Serial.print(dt.year(), DEC);
+  }
+  Serial.println();
 
 } //end fct
 
@@ -257,20 +293,26 @@ int check_tempC(void) {
 
 
 // - OLED_FUCT -
-void set_oled(int mode) {
+void set_oled(boolean day_mode) {
 
-  char symb[2] = {'D', 'N'};
-  float temp_max[2] = { temp_max_day, temp_max_night };
   DateTime now = rtc.now(), t_start = 'null', t_end = 'null';
-
   
   display.setCursor(0,0);
   display.setTextSize(2);
   display.setTextColor(WHITE);
   
-  // D
-  display.print(symb[mode]);
-  
+  // select time slot in therms of day or night mode
+  if ( day_mode ) {
+    display.print('D');
+    t_start = dt_start_day;
+    t_end = dt_end_day;
+  }
+  else {
+    display.print('N');
+    t_start = dt_end_day;
+    t_end = dt_start_day;
+  }
+
   // time
   display.setCursor(20,0);
   display_time( now );
@@ -285,18 +327,8 @@ void set_oled(int mode) {
   
   // temp_max
   display.setCursor(65,25);
-  display.print(temp_max[mode]);
-  
-  // select time slot in therms of day or night mode
-  if ( mode == 1 ) {
-    t_start = dt_end_day;
-    t_end = dt_start_day;
-  }
-  else {
-    t_start = dt_start_day;
-    t_end = dt_end_day;
-  }
-  
+  display.print("MAX C");
+    
   // time slot
   display.setCursor(0,50);
   display_time( t_start );
